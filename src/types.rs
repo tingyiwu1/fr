@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fmt::Display, mem};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    mem,
+};
 
 use crate::utils::{Copyable, Expr, Ident, Lifetime, Lval, Mutable, Stmt};
 
@@ -6,9 +10,18 @@ use crate::utils::{Copyable, Expr, Ident, Lifetime, Lval, Mutable, Stmt};
 pub enum Type {
     Unit,
     Int,
+    Bool,
     Box(Box<Type>),
-    Ref(Lval, Mutable),
+    Ref(HashSet<Lval>, Mutable),
     Undefined(Box<Type>),
+}
+
+fn fmt_lvals(lvals: &HashSet<Lval>) -> String {
+    lvals
+        .iter()
+        .map(|lv| format!("{}", lv))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 impl Type {
@@ -16,10 +29,10 @@ impl Type {
         Type::Box(Box::new(tipe))
     }
     pub fn imm_ref(lval: Lval) -> Type {
-        Type::Ref(lval, Mutable::No)
+        Type::Ref(HashSet::from([lval]), Mutable::No)
     }
     pub fn mut_ref(lval: Lval) -> Type {
-        Type::Ref(lval, Mutable::Yes)
+        Type::Ref(HashSet::from([lval]), Mutable::Yes)
     }
     pub fn undefined(tipe: Type) -> Type {
         Type::Undefined(Box::new(tipe))
@@ -31,9 +44,10 @@ impl Display for Type {
         match self {
             Type::Unit => write!(f, "ε"),
             Type::Int => write!(f, "int"),
+            Type::Bool => write!(f, "bool"),
             Type::Box(t) => write!(f, "□{}", t),
-            Type::Ref(lval, Mutable::Yes) => write!(f, "&mut {}", lval),
-            Type::Ref(lval, Mutable::No) => write!(f, "&{}", lval),
+            Type::Ref(lvals, Mutable::Yes) => write!(f, "&mut {}", fmt_lvals(lvals)),
+            Type::Ref(lvals, Mutable::No) => write!(f, "&{}", fmt_lvals(lvals)),
             Type::Undefined(t) => write!(f, "⌊{}⌋", t),
         }
     }
@@ -58,21 +72,19 @@ impl Display for Slot {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Env(pub HashMap<Ident, Slot>);
-
-impl Env {
-    pub fn default() -> Env {
-        Env(HashMap::new())
-    }
+pub struct Env {
+    pub map: HashMap<Ident, Slot>,
+    pub fresh_var: usize,
+    pub lifetimes: Vec<Lifetime>,
 }
 
 impl Display for Env {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.0.is_empty() {
+        if self.map.is_empty() {
             return write!(f, "{{}}");
         }
         write!(f, "{{\n")?;
-        for (k, v) in self.0.iter() {
+        for (k, v) in self.map.iter() {
             write!(f, "    {} → {}\n", k, v)?;
         }
         write!(f, "}}")
@@ -96,44 +108,138 @@ pub enum Error {
     LifetimeTooShort(Expr),
     AssignAfterBorrow(Lval),
     IllTypedAssertion(Type, Type),
+    IllTypedIfCond(Type),
+    CannotCopy(Type),
 }
 
 pub type TypeResult<T> = Result<T, Error>;
 
 impl Env {
+    pub fn default() -> Env {
+        Env {
+            map: HashMap::new(),
+            fresh_var: 0,
+            lifetimes: vec![Lifetime::global()],
+        }
+    }
+
+    fn fresh_var(&mut self) -> Ident {
+        self.fresh_var += 1;
+        self.fresh_var.to_string()
+    }
+
     pub fn insert(&mut self, var: &str, tipe: Type, lifetime: Lifetime) {
         let t = tipe.clone();
-        self.0.insert(var.to_owned(), Slot { tipe, lifetime });
+        self.map.insert(var.to_owned(), Slot { tipe, lifetime });
         println!(
             "context after insert({} → <{}> '{}): {}",
             var, t, lifetime, self
         );
     }
 
-    pub fn type_lval(&self, lval: &Lval) -> TypeResult<Slot> {
-        let (t, lifetime) = self.type_lval_inner(&lval.ident, lval.derefs)?;
-        Ok(Slot {
-            tipe: t.to_owned(),
-            lifetime,
-        })
+    pub fn join(&self, t1: Type, t2: Type) -> TypeResult<Type> {
+        // println!("joining {t1} {t2}");
+
+        match (t1, t2) {
+            (t1, t2) if t1 == t2 => Ok(t1),
+            (Type::Undefined(t1), Type::Undefined(t2)) => Ok(Type::undefined(self.join(*t1, *t2)?)),
+            (Type::Box(t1), Type::Box(t2)) => Ok(Type::boxx(self.join(*t1, *t2)?)),
+            (t1, Type::Undefined(t2)) => {
+                let j = match (t1, *t2) {
+                    (Type::Box(t1), Type::Box(t2)) => {
+                        let j = Type::boxx(self.join(*t1, Type::Undefined(t2))?);
+                        Type::boxx(j)
+                    }
+                    (t1, t2) => self.join(t1, t2)?,
+                };
+                Ok(Type::undefined(j))
+            }
+            (t1 @ Type::Undefined(..), t2) => self.join(t2, t1),
+            (Type::Ref(lvals1, m1), Type::Ref(lvals2, m2)) if m1 == m2 => {
+                Ok(Type::Ref(lvals1.union(&lvals2).cloned().collect(), m1))
+            }
+            (t1, t2) => Err(Error::IncompatibleTypes(t1, t2)),
+        }
     }
 
-    fn type_lval_inner(&self, ident: &Ident, derefs: usize) -> TypeResult<(&Type, Lifetime)> {
+    pub fn join_env(&mut self, other: &mut Self) -> TypeResult<()> {
+        // dom(Γ1) = dom(Γ2)
+        // println!("joining");
+        // println!("{self}");
+        // println!("{other}");
+        assert!(
+            self.map.len() == other.map.len() && self.map.keys().all(|k| other.map.contains_key(k)),
+            "joining envs with different domains"
+        );
+
+        for k in self.map.keys().cloned().collect::<Vec<_>>() {
+            let mut s1 = self.map.remove(&k).expect("should have key");
+            let s2 = other.map.remove(&k).expect("other should have same domain");
+            let n = self.join(s1.tipe, s2.tipe)?;
+            s1.tipe = n;
+            self.map.insert(k, s1);
+        }
+        assert!(other.map.len() == 0, "leftover item in other");
+
+        println!("context after join env: {}", self);
+
+        Ok(())
+    }
+
+    // l ≥ m, the ordering relation on liftimes (Note (2) pg. 13)
+    pub fn lifetime_contains(&self, l: Lifetime, m: Lifetime) -> bool {
+        let l_pos = self
+            .lifetimes
+            .iter()
+            .position(|lt| *lt == l)
+            .expect("l should be in stack");
+
+        let m_pos = self
+            .lifetimes
+            .iter()
+            .position(|lt| *lt == m)
+            .expect("m should be in stack");
+
+        l_pos <= m_pos
+    }
+
+    pub fn type_lval(&self, lval: &Lval) -> TypeResult<Slot> {
+        let (tipe, lifetime) = self.type_lval_inner(&lval.ident, lval.derefs)?;
+        Ok(Slot { tipe, lifetime })
+    }
+
+    fn type_lval_inner(&self, ident: &Ident, derefs: usize) -> TypeResult<(Type, Lifetime)> {
         if derefs == 0 {
             let Slot { tipe, lifetime } = self
-                .0
+                .map
                 .get(ident)
                 .ok_or(Error::UnknownVar(ident.to_owned()))?;
-            Ok((tipe, *lifetime))
+            Ok((tipe.to_owned(), *lifetime))
         } else {
             match self.type_lval_inner(ident, derefs - 1)? {
-                (Type::Box(t), l) => Ok((t, l)),
-                (Type::Ref(lval, ..), ..) => self.type_lval_inner(&lval.ident, lval.derefs),
-                (Type::Undefined(_), ..) => Err(Error::MovedOut(Lval {
-                    ident: ident.to_owned(),
-                    derefs,
-                })),
-                (t, _) => Err(Error::CannotDeref(t.to_owned())),
+                (Type::Box(t), l) => Ok((*t, l)),
+                (Type::Ref(lvals, ..), ..) => {
+                    assert!(lvals.len() > 0);
+
+                    let v = lvals
+                        .iter()
+                        .map(|lval| self.type_lval_inner(&lval.ident, lval.derefs))
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    let mut res_t = v[0].0.clone();
+                    let mut res_l = v[0].1;
+
+                    for (t, l) in v.into_iter().skip(1) {
+                        res_t = self.join(res_t, t.clone())?;
+                        if self.lifetime_contains(res_l, l) {
+                            res_l = l;
+                        }
+                    }
+
+                    Ok((res_t, res_l))
+                }
+                // (t @ Type::Undefined(..), l) => Ok((t, l)),
+                (t, _) => Err(Error::CannotDeref(t)),
             }
         }
     }
@@ -141,28 +247,30 @@ impl Env {
     // Returns the type under the boxes of a type, given that the
     // underlying type is defined
     pub fn contained(&self, var: &str) -> Option<&Type> {
-        let s = self.0.get(var)?;
+        let s = self.map.get(var)?;
         self.contained_inner(&s.tipe)
     }
     fn contained_inner<'a>(&self, tipe: &'a Type) -> Option<&'a Type> {
         match tipe {
-            t @ Type::Unit | t @ Type::Int | t @ Type::Ref(..) => Some(&t),
+            t @ Type::Unit | t @ Type::Int | t @ Type::Bool | t @ Type::Ref(..) => Some(&t),
             Type::Box(t) => self.contained_inner(t),
             _ => None,
         }
     }
 
     pub fn read_prohibited(&self, lval: &Lval) -> bool {
-        self.0.keys().any(|x| match self.contained(x) {
-            Some(Type::Ref(u, Mutable::Yes)) => u.ident == lval.ident,
+        self.map.keys().any(|x| match self.contained(x) {
+            Some(Type::Ref(lvals, Mutable::Yes)) => lvals.iter().any(|lv| lv.ident == lval.ident),
             _ => false,
         })
     }
 
     pub fn write_prohibited(&self, lval: &Lval) -> bool {
         self.read_prohibited(lval)
-            || self.0.keys().any(|x| match self.contained(x) {
-                Some(Type::Ref(u, Mutable::No)) => u.ident == lval.ident,
+            || self.map.keys().any(|x| match self.contained(x) {
+                Some(Type::Ref(lvals, Mutable::No)) => {
+                    lvals.iter().any(|lv| lv.ident == lval.ident)
+                }
                 _ => false,
             })
     }
@@ -170,7 +278,7 @@ impl Env {
     // "move" is a keyword in Rust
     pub fn moove(&mut self, lval: &Lval) -> TypeResult<()> {
         let slot = self
-            .0
+            .map
             .get_mut(&lval.ident)
             .ok_or(Error::UnknownVar(lval.ident.to_owned()))?;
 
@@ -204,7 +312,7 @@ impl Env {
 
     // so is "mut"
     pub fn muut(&self, lval: &Lval) -> bool {
-        let slot = self.0.get(&lval.ident).expect("slot should be present");
+        let slot = self.map.get(&lval.ident).expect("slot should be present");
         self.mutable(lval.derefs, &slot.tipe)
     }
 
@@ -214,68 +322,102 @@ impl Env {
         }
         match tipe {
             Type::Box(t) => self.mutable(derefs - 1, t),
-            Type::Ref(lval, Mutable::Yes) => {
-                let slot = self.0.get(&lval.ident).expect("slot should be present");
+            Type::Ref(lvals, Mutable::Yes) => lvals.iter().all(|lval| {
+                let slot = self.map.get(&lval.ident).expect("slot should be present");
                 self.mutable(lval.derefs + derefs - 1, &slot.tipe)
-            }
+            }),
             _ => false,
         }
     }
 
-    pub fn compatible(&self, t1: &Type, t2: &Type) -> bool {
+    pub fn compatible(&self, t1: &Type, t2: &Type) -> TypeResult<bool> {
+        // println!("compatible({t1} | {t2})");
         match (t1, t2) {
-            (Type::Int, Type::Int) | (Type::Unit, Type::Unit) => true,
+            (Type::Int, Type::Int) | (Type::Unit, Type::Unit) | (Type::Bool, Type::Bool) => {
+                Ok(true)
+            }
             (Type::Box(t1), Type::Box(t2)) => self.compatible(t1, t2),
             (Type::Undefined(t), _) => self.compatible(t, t2),
             (_, Type::Undefined(t)) => self.compatible(t1, t),
-            (Type::Ref(lval1, m1), Type::Ref(lval2, m2)) if m1 == m2 => {
-                let t1 = self.type_lval(lval1).expect("should be well typed").tipe;
-                let t2 = self.type_lval(lval2).expect("should be well typed").tipe;
-                self.compatible(&t1, &t2)
+            (Type::Ref(lvals1, m1), Type::Ref(lvals2, m2)) if m1 == m2 => {
+                for lval1 in lvals1 {
+                    for lval2 in lvals2 {
+                        // println!("{lval1}, {lval2}");
+                        let t1 = self.type_lval(lval1)?.tipe;
+                        let t2 = self.type_lval(lval2)?.tipe;
+                        // println!("{t1}, {t2}");
+                        if !self.compatible(&t1, &t2)? {
+                            return Ok(false);
+                        }
+                    }
+                }
+                Ok(true)
             }
-            _ => false,
+            _ => Ok(false),
         }
     }
 
     pub fn write(&mut self, w: &Lval, tipe: Type) -> TypeResult<()> {
         let t = tipe.clone();
-        let res = self.write_inner(&w.ident, w.derefs, tipe);
+        // println!("write({w}, {t})");
+        let res = self.write_inner(0, &w.ident, w.derefs, tipe);
         println!("context after write({w}, {t}): {self}");
         res
     }
 
-    fn write_inner(&mut self, ident: &Ident, derefs: usize, tipe: Type) -> TypeResult<()> {
-        // we need to remove and reinsert the slot because get_mut would mutably borrow self meaning we can't pass self to update.
-        let (x, mut slot) = self
-            .0
-            .remove_entry(ident)
+    fn write_inner(
+        &mut self,
+        rank: usize,
+        ident: &Ident,
+        derefs: usize,
+        tipe: Type,
+    ) -> TypeResult<()> {
+        // println!("write_inner({rank}, {ident}, {derefs}, {tipe})");
+        let slot = self
+            .map
+            .get(ident)
             .ok_or(Error::UnknownVar(ident.to_owned()))?;
 
-        slot.tipe = self.update(derefs, slot.tipe, tipe)?;
+        let new = self.update(rank, derefs, slot.tipe.clone(), tipe)?;
 
-        assert!(self.0.insert(x, slot).is_none());
+        self.map.get_mut(ident).expect("should be present").tipe = new;
+
         Ok(())
     }
 
-    fn update(&mut self, derefs: usize, t1: Type, t2: Type) -> TypeResult<Type> {
+    fn update(&mut self, rank: usize, derefs: usize, t1: Type, t2: Type) -> TypeResult<Type> {
+        // let signal = format!("update({rank}, {derefs}, {t1}, {t2})");
+        // println!("{signal}");
         if derefs == 0 {
-            return Ok(t2);
+            if rank == 0 {
+                return Ok(t2);
+            }
+            return self.join(t1, t2);
         }
-        match t1 {
+        let res = match t1 {
             Type::Box(t) => {
-                let t_prime = self.update(derefs - 1, *t, t2)?;
-                Ok(Type::boxx(t_prime))
+                let t_prime = self.update(rank, derefs - 1, *t, t2)?;
+                // print!("{signal} ");
+                // println!("t_prime: {t_prime}");
+                Type::boxx(t_prime)
             }
-            Type::Ref(lval, Mutable::Yes) => {
-                self.write_inner(&lval.ident, lval.derefs + derefs - 1, t2)?;
-                Ok(Type::mut_ref(lval))
+            Type::Ref(lvals, Mutable::Yes) => {
+                for lval in lvals.iter().cloned() {
+                    let mut new = self.clone();
+                    new.write_inner(rank + 1, &lval.ident, lval.derefs + derefs - 1, t2.clone())?;
+                    self.join_env(&mut new)?;
+                }
+
+                Type::Ref(lvals, Mutable::Yes)
             }
-            _ => Err(Error::CannotDeref(t1)),
-        }
+            _ => return Err(Error::CannotDeref(t1)),
+        };
+        // println!("env after {signal}: {self}");
+        Ok(res)
     }
 
     pub fn drop(&mut self, l: Lifetime) {
-        let res = self.0.retain(|_, s| s.lifetime != l);
+        let res = self.map.retain(|_, s| s.lifetime != l);
         println!("context after drop('{l}): {self}");
         res
     }
@@ -284,43 +426,24 @@ impl Env {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Context {
     pub env: Env,
-    lifetimes: Vec<Lifetime>,
 }
 impl Context {
     pub fn default() -> Self {
         Context {
             env: Env::default(),
-            lifetimes: vec![Lifetime::global()],
         }
-    }
-
-    // l ≥ m, the ordering relation on liftimes (Note (2) pg. 13)
-    fn lifetime_contains(&self, l: Lifetime, m: Lifetime) -> bool {
-        let l_pos = self
-            .lifetimes
-            .iter()
-            .position(|lt| *lt == l)
-            .expect("l should be in stack");
-
-        let m_pos = self
-            .lifetimes
-            .iter()
-            .position(|lt| *lt == m)
-            .expect("m should be in stack");
-
-        l_pos <= m_pos
     }
 
     // Γ ⊢ T ≥ l (Definition 3.21)
     fn well_formed(&self, tipe: &Type, l: Lifetime) -> bool {
         match tipe {
-            Type::Int | Type::Unit => true,
+            Type::Int | Type::Unit | Type::Bool => true,
             Type::Box(t) => self.well_formed(t, l),
-            Type::Ref(lval, ..) => {
+            Type::Ref(lvals, ..) => lvals.iter().all(|lval| {
                 let Slot { lifetime: m, .. } =
                     self.env.type_lval(lval).expect("should be well typed");
-                return self.lifetime_contains(m, l);
-            }
+                self.env.lifetime_contains(m, l)
+            }),
             _ => {
                 panic!("unexpected type")
             }
@@ -328,7 +451,7 @@ impl Context {
     }
 
     pub fn type_expr(&mut self, expr: &mut Expr) -> TypeResult<Type> {
-        print!("'{:4}", format!("{}", self.lifetimes.last().unwrap()));
+        print!("'{:4}", format!("{}", self.env.lifetimes.last().unwrap()));
         print!("typing expr: {} ", expr);
         let res;
         match expr {
@@ -340,6 +463,51 @@ impl Context {
                 println!("(T-Int)");
                 res = Type::Int
             }
+            Expr::Bool(_) => {
+                println!("(T-Bool)");
+                res = Type::Bool
+            }
+            Expr::Equals(e1, e2) => {
+                println!("(T-Equal)");
+
+                let t1 = self.type_expr(e1)?;
+                let gamma = self.env.fresh_var();
+
+                self.env.insert(
+                    &gamma,
+                    t1,
+                    *self
+                        .env
+                        .lifetimes
+                        .last()
+                        .expect("should have current lifetime"),
+                );
+
+                let t2 = self.type_expr(e2)?;
+
+                let Slot { tipe: t1, .. } = self.env.map.remove(&gamma).expect("should be present");
+
+                self.env
+                    .compatible(&t1, &t2)?
+                    .then(|| ())
+                    .ok_or(Error::IncompatibleTypes(t1.to_owned(), t2.to_owned()))?;
+
+                matches!(
+                    t1,
+                    Type::Int | Type::Unit | Type::Bool | Type::Ref(.., Mutable::No)
+                )
+                .then(|| ())
+                .ok_or(Error::CannotCopy(t1))?;
+
+                matches!(
+                    t2,
+                    Type::Int | Type::Unit | Type::Bool | Type::Ref(.., Mutable::No)
+                )
+                .then(|| ())
+                .ok_or(Error::CannotCopy(t2))?;
+
+                res = Type::Bool
+            }
             Expr::Lval(lval, copyable) => {
                 self.env
                     .contained(&lval.ident)
@@ -348,7 +516,7 @@ impl Context {
                 let Slot { tipe, .. } = self.env.type_lval(lval)?;
 
                 match tipe {
-                    Type::Int | Type::Unit | Type::Ref(.., Mutable::No) => {
+                    Type::Int | Type::Unit | Type::Bool | Type::Ref(.., Mutable::No) => {
                         *copyable = Copyable::Yes;
 
                         println!("(T-Copy)");
@@ -383,9 +551,29 @@ impl Context {
             Expr::AssertEq(e1, e2) => {
                 println!("(T-AssertEq)");
                 match (self.type_expr(e1)?, self.type_expr(e2)?) {
-                    (Type::Int, Type::Int) | (Type::Unit, Type::Unit) => res = Type::Unit,
+                    (Type::Int, Type::Int)
+                    | (Type::Unit, Type::Unit)
+                    | (Type::Bool, Type::Bool) => res = Type::Unit,
                     (t1, t2) => return Err(Error::IllTypedAssertion(t1, t2)),
                 }
+            }
+            Expr::IfElse { cond, t, f } => {
+                println!("(T-If)");
+
+                let c = self.type_expr(cond)?;
+
+                (c == Type::Bool)
+                    .then(|| ())
+                    .ok_or(Error::IllTypedIfCond(c))?;
+
+                let mut ctx2 = self.clone();
+
+                let t1 = self.type_expr(t)?;
+                let t2 = ctx2.type_expr(f)?;
+
+                self.env.join_env(&mut ctx2.env)?;
+
+                res = self.env.join(t1, t2)?;
             }
             Expr::Borrow(lval, Mutable::Yes) => {
                 println!("(T-MutBorrow)");
@@ -421,8 +609,8 @@ impl Context {
             Expr::Block(stmts, expr, lifetime) => {
                 println!("(T-Block)");
 
-                print!("'{:4}", format!("{}", self.lifetimes.last().unwrap()));
-                self.lifetimes.push(*lifetime);
+                print!("'{:4}", format!("{}", self.env.lifetimes.last().unwrap()));
+                self.env.lifetimes.push(*lifetime);
                 println!("enter block '{lifetime}");
                 println!();
                 for stmt in stmts {
@@ -434,11 +622,14 @@ impl Context {
                     .then(|| ())
                     .ok_or(Error::LifetimeTooShort(*expr.to_owned()))?;
 
-                print!("'{:4}", format!("{}", self.lifetimes.last().unwrap()));
+                print!("'{:4}", format!("{}", self.env.lifetimes.last().unwrap()));
                 println!("exit block '{lifetime}");
 
                 assert_eq!(
-                    self.lifetimes.pop().expect("should have current lifetime"),
+                    self.env
+                        .lifetimes
+                        .pop()
+                        .expect("should have current lifetime"),
                     *lifetime
                 );
                 self.env.drop(*lifetime);
@@ -448,13 +639,13 @@ impl Context {
                 res = t;
             }
         }
-        print!("'{:4}", format!("{}", self.lifetimes.last().unwrap()));
+        print!("'{:4}", format!("{}", self.env.lifetimes.last().unwrap()));
         println!("typed expr {expr} : {res}");
         Ok(res)
     }
 
     pub fn type_stmt(&mut self, stmt: &mut Stmt) -> TypeResult<()> {
-        print!("'{:4}", format!("{}", self.lifetimes.last().unwrap()));
+        print!("'{:4}", format!("{}", self.env.lifetimes.last().unwrap()));
         print!("typing stmt: {} ", stmt);
         match stmt {
             Stmt::Assign(lval, expr) => {
@@ -465,7 +656,7 @@ impl Context {
                     lifetime: m,
                 } = self.env.type_lval(lval)?;
 
-                print!("'{:4}", format!("{}", self.lifetimes.last().unwrap()));
+                print!("'{:4}", format!("{}", self.env.lifetimes.last().unwrap()));
                 println!("typed lval {lval} : {t1}");
 
                 let t2 = self.type_expr(expr)?;
@@ -473,7 +664,7 @@ impl Context {
                 assert!(!matches!(t2, Type::Undefined(..)), "expr is undefined");
 
                 self.env
-                    .compatible(&t1, &t2)
+                    .compatible(&t1, &t2)?
                     .then(|| ())
                     .ok_or(Error::IncompatibleTypes(t1, t2.to_owned()))?;
 
@@ -485,6 +676,8 @@ impl Context {
                     .write(lval, t2)
                     .or(Err(Error::UpdateBehindImmRef(lval.to_owned())))?;
 
+                println!("after write");
+
                 (!self.env.write_prohibited(lval))
                     .then(|| ())
                     .ok_or(Error::AssignAfterBorrow(lval.to_owned()))?;
@@ -494,7 +687,7 @@ impl Context {
             Stmt::LetMut(x, expr) => {
                 println!("(T-Declare)");
 
-                (!self.env.0.contains_key(x))
+                (!self.env.map.contains_key(x))
                     .then(|| ())
                     .ok_or(Error::Shadowing(x.to_owned()))?;
 
@@ -503,7 +696,11 @@ impl Context {
                 self.env.insert(
                     x,
                     t,
-                    *self.lifetimes.last().expect("should have current lifetime"),
+                    *self
+                        .env
+                        .lifetimes
+                        .last()
+                        .expect("should have current lifetime"),
                 );
 
                 Ok(())

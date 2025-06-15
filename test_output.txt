@@ -27,16 +27,16 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 
 running 26 tests
-test tests::drop_unowned ... ok
-test tests::eval_assign_move ... ok
 test tests::drop_owned ... ok
-test tests::eval_block ... ok
+test tests::drop_unowned ... ok
 test tests::eval_assign_copy ... ok
-test tests::eval_assign_move_deref ... ok
-test tests::drop_larger_example ... ok
 test tests::eval_block_ref ... ok
+test tests::drop_larger_example ... ok
 test tests::eval_block_mut_ref ... ok
+test tests::eval_assign_move ... ok
 test tests::eval_assign_replace ... ok
+test tests::eval_block ... ok
+test tests::eval_assign_move_deref ... ok
 test tests::eval_box ... ok
 test tests::eval_box_box ... ok
 test tests::eval_copy ... ok
@@ -44,17 +44,27 @@ test tests::eval_expr_stmt ... ok
 test tests::eval_let_mut ... ok
 test tests::eval_lits ... ok
 test tests::eval_move ... ok
-test tests::locate_var ... ok
 test tests::locate_ref ... ok
-test tests::locate_panic - should panic ... ok
+test tests::locate_var ... ok
 test tests::read_ref_owned ... ok
-test tests::read_panic - should panic ... ok
 test tests::read_var ... ok
 test tests::write_deref_read_diff ... ok
+test tests::locate_panic - should panic ... ok
+test tests::read_panic - should panic ... ok
 test tests::write_panic - should panic ... ok
 test tests::write_two_deref ... ok
 
 successes:
+
+---- tests::drop_owned stdout ----
+store after insert(l_x → <l_1 ●> '0): {
+    l_x → <l_1 ●> '0
+}
+store after insert(l_1 → <1> '0): {
+    l_1 → <1> '0
+    l_x → <l_1 ●> '0
+}
+store after drop([l_x ●]): {}
 
 ---- tests::drop_unowned stdout ----
 store after insert(l_x → <l_1 ○> '0): {
@@ -70,88 +80,6 @@ store after insert(l_1 → <1> '0): {
 store after drop([l_x ●]): {
     l_1 → <1> '0
 }
-
----- tests::eval_assign_move stdout ----
-'4   evaluating stmt: let mut x = Box::new(14) (R-Declare)
-'4   evaluating expr: Box::new(14) (R-Box)
-'4   evaluating expr: 14 (R-Int)
-'4   evaluated expr 14 ⇓ 14
-store after insert(l_1 → <14> '0): {
-    l_1 → <14> '0
-}
-'4   evaluated expr Box::new(14) ⇓ l_1 ●
-store after insert(l_x → <l_1 ●> '4): {
-    l_1 → <14> '0
-    l_x → <l_1 ●> '4
-}
-'4   evaluating stmt: let mut y = Box::new(15) (R-Declare)
-'4   evaluating expr: Box::new(15) (R-Box)
-'4   evaluating expr: 15 (R-Int)
-'4   evaluated expr 15 ⇓ 15
-store after insert(l_2 → <15> '0): {
-    l_2 → <15> '0
-    l_1 → <14> '0
-    l_x → <l_1 ●> '4
-}
-'4   evaluated expr Box::new(15) ⇓ l_2 ●
-store after insert(l_y → <l_2 ●> '4): {
-    l_x → <l_1 ●> '4
-    l_y → <l_2 ●> '4
-    l_2 → <15> '0
-    l_1 → <14> '0
-}
-'4   evaluating stmt: x = y (R-Assign)
-'4   evaluating expr: y (R-Move)
-store after write(y, ⊥): {
-    l_x → <l_1 ●> '4
-    l_y → <⊥> '4
-    l_2 → <15> '0
-    l_1 → <14> '0
-}
-'4   evaluated expr y ⇓ l_2 ●
-store after drop([l_1 ●]): {
-    l_x → <l_1 ●> '4
-    l_y → <⊥> '4
-    l_2 → <15> '0
-}
-store after write(x, l_2 ●): {
-    l_x → <l_2 ●> '4
-    l_y → <⊥> '4
-    l_2 → <15> '0
-}
-
----- tests::drop_owned stdout ----
-store after insert(l_x → <l_1 ●> '0): {
-    l_x → <l_1 ●> '0
-}
-store after insert(l_1 → <1> '0): {
-    l_x → <l_1 ●> '0
-    l_1 → <1> '0
-}
-store after drop([l_x ●]): {}
-
----- tests::eval_block stdout ----
-'5   evaluating expr: {[..]; ε} '3 (R-Block)
-'5   enter block '3
-
-'3   evaluating stmt: let mut x = Box::new(23) (R-Declare)
-'3   evaluating expr: Box::new(23) (R-Box)
-'3   evaluating expr: 23 (R-Int)
-'3   evaluated expr 23 ⇓ 23
-store after insert(l_1 → <23> '0): {
-    l_1 → <23> '0
-}
-'3   evaluated expr Box::new(23) ⇓ l_1 ●
-store after insert(l_x → <l_1 ●> '3): {
-    l_x → <l_1 ●> '3
-    l_1 → <23> '0
-}
-'3   evaluating expr: ε (R-Unit)
-'3   evaluated expr ε ⇓ ε
-'3   exit block '3
-store after drop([l_x ●]): {}
-
-'5   evaluated expr {[..]; ε} '3 ⇓ ε
 
 ---- tests::eval_assign_copy stdout ----
 '4   evaluating stmt: let mut x = Box::new(14) (R-Declare)
@@ -172,144 +100,28 @@ store after insert(l_x → <l_1 ●> '4): {
 '4   evaluated expr 15 ⇓ 15
 store after insert(l_2 → <15> '0): {
     l_x → <l_1 ●> '4
-    l_2 → <15> '0
     l_1 → <14> '0
+    l_2 → <15> '0
 }
 '4   evaluated expr Box::new(15) ⇓ l_2 ●
 store after insert(l_y → <l_2 ●> '4): {
-    l_x → <l_1 ●> '4
-    l_2 → <15> '0
-    l_1 → <14> '0
     l_y → <l_2 ●> '4
+    l_x → <l_1 ●> '4
+    l_1 → <14> '0
+    l_2 → <15> '0
 }
 '4   evaluating stmt: x = y^ (R-Assign)
 '4   evaluating expr: y^ (R-Copy)
 '4   evaluated expr y^ ⇓ l_2 ●
 store after drop([l_1 ●]): {
+    l_y → <l_2 ●> '4
     l_x → <l_1 ●> '4
     l_2 → <15> '0
-    l_y → <l_2 ●> '4
 }
 store after write(x, l_2 ●): {
+    l_y → <l_2 ●> '4
     l_x → <l_2 ●> '4
     l_2 → <15> '0
-    l_y → <l_2 ●> '4
-}
-
----- tests::eval_assign_move_deref stdout ----
-'4   evaluating stmt: let mut x = Box::new(14) (R-Declare)
-'4   evaluating expr: Box::new(14) (R-Box)
-'4   evaluating expr: 14 (R-Int)
-'4   evaluated expr 14 ⇓ 14
-store after insert(l_1 → <14> '0): {
-    l_1 → <14> '0
-}
-'4   evaluated expr Box::new(14) ⇓ l_1 ●
-store after insert(l_x → <l_1 ●> '4): {
-    l_1 → <14> '0
-    l_x → <l_1 ●> '4
-}
-'4   evaluating stmt: let mut y = Box::new(15) (R-Declare)
-'4   evaluating expr: Box::new(15) (R-Box)
-'4   evaluating expr: 15 (R-Int)
-'4   evaluated expr 15 ⇓ 15
-store after insert(l_2 → <15> '0): {
-    l_1 → <14> '0
-    l_x → <l_1 ●> '4
-    l_2 → <15> '0
-}
-'4   evaluated expr Box::new(15) ⇓ l_2 ●
-store after insert(l_y → <l_2 ●> '4): {
-    l_1 → <14> '0
-    l_x → <l_1 ●> '4
-    l_2 → <15> '0
-    l_y → <l_2 ●> '4
-}
-'4   evaluating stmt: *x = *y (R-Assign)
-'4   evaluating expr: *y (R-Move)
-store after write(*y, ⊥): {
-    l_1 → <14> '0
-    l_x → <l_1 ●> '4
-    l_2 → <⊥> '0
-    l_y → <l_2 ●> '4
-}
-'4   evaluated expr *y ⇓ 15
-store after drop([14]): {
-    l_1 → <14> '0
-    l_x → <l_1 ●> '4
-    l_2 → <⊥> '0
-    l_y → <l_2 ●> '4
-}
-store after write(*x, 15): {
-    l_1 → <15> '0
-    l_x → <l_1 ●> '4
-    l_2 → <⊥> '0
-    l_y → <l_2 ●> '4
-}
-
----- tests::drop_larger_example stdout ----
-store after insert(l_x → <l_1 ●> '1): {
-    l_x → <l_1 ●> '1
-}
-store after insert(l_1 → <l_2 ○> '2): {
-    l_x → <l_1 ●> '1
-    l_1 → <l_2 ○> '2
-}
-store after insert(l_2 → <1> '1): {
-    l_2 → <1> '1
-    l_x → <l_1 ●> '1
-    l_1 → <l_2 ○> '2
-}
-store after insert(l_y → <l_x ○> '2): {
-    l_x → <l_1 ●> '1
-    l_2 → <1> '1
-    l_y → <l_x ○> '2
-    l_1 → <l_2 ○> '2
-}
-store after insert(l_z → <l_2 ●> '2): {
-    l_z → <l_2 ●> '2
-    l_x → <l_1 ●> '1
-    l_2 → <1> '1
-    l_y → <l_x ○> '2
-    l_1 → <l_2 ○> '2
-}
-store after insert(l_w → <l_3 ●> '1): {
-    l_z → <l_2 ●> '2
-    l_w → <l_3 ●> '1
-    l_x → <l_1 ●> '1
-    l_2 → <1> '1
-    l_y → <l_x ○> '2
-    l_1 → <l_2 ○> '2
-}
-store after insert(l_3 → <2> '2): {
-    l_z → <l_2 ●> '2
-    l_w → <l_3 ●> '1
-    l_x → <l_1 ●> '1
-    l_2 → <1> '1
-    l_y → <l_x ○> '2
-    l_3 → <2> '2
-    l_1 → <l_2 ○> '2
-}
-store after insert(l_v → <l_1 ○> '1): {
-    l_x → <l_1 ●> '1
-    l_y → <l_x ○> '2
-    l_3 → <2> '2
-    l_z → <l_2 ●> '2
-    l_w → <l_3 ●> '1
-    l_v → <l_1 ○> '1
-    l_2 → <1> '1
-    l_1 → <l_2 ○> '2
-}
-store after drop([l_x ●, l_w ●, l_v ●, l_2 ●]): {
-    l_y → <l_x ○> '2
-    l_z → <l_2 ●> '2
-}
-store after insert(l_y → <l_x ○> '2): {
-    l_y → <l_x ○> '2
-}
-store after insert(l_z → <l_2 ●> '2): {
-    l_y → <l_x ○> '2
-    l_z → <l_2 ●> '2
 }
 
 ---- tests::eval_block_ref stdout ----
@@ -333,8 +145,8 @@ store after insert(l_x → <l_1 ●> '4): {
 '6   evaluated expr &*x ⇓ l_1 ○
 store after insert(l_y → <l_1 ○> '6): {
     l_x → <l_1 ●> '4
-    l_y → <l_1 ○> '6
     l_1 → <203> '0
+    l_y → <l_1 ○> '6
 }
 '6   evaluating expr: ε (R-Unit)
 '6   evaluated expr ε ⇓ ε
@@ -345,6 +157,71 @@ store after drop([l_y ●]): {
 }
 
 '4   evaluated expr {[..]; ε} '6 ⇓ ε
+
+---- tests::drop_larger_example stdout ----
+store after insert(l_x → <l_1 ●> '1): {
+    l_x → <l_1 ●> '1
+}
+store after insert(l_1 → <l_2 ○> '2): {
+    l_1 → <l_2 ○> '2
+    l_x → <l_1 ●> '1
+}
+store after insert(l_2 → <1> '1): {
+    l_1 → <l_2 ○> '2
+    l_2 → <1> '1
+    l_x → <l_1 ●> '1
+}
+store after insert(l_y → <l_x ○> '2): {
+    l_x → <l_1 ●> '1
+    l_y → <l_x ○> '2
+    l_2 → <1> '1
+    l_1 → <l_2 ○> '2
+}
+store after insert(l_z → <l_2 ●> '2): {
+    l_x → <l_1 ●> '1
+    l_y → <l_x ○> '2
+    l_z → <l_2 ●> '2
+    l_2 → <1> '1
+    l_1 → <l_2 ○> '2
+}
+store after insert(l_w → <l_3 ●> '1): {
+    l_x → <l_1 ●> '1
+    l_w → <l_3 ●> '1
+    l_y → <l_x ○> '2
+    l_z → <l_2 ●> '2
+    l_2 → <1> '1
+    l_1 → <l_2 ○> '2
+}
+store after insert(l_3 → <2> '2): {
+    l_x → <l_1 ●> '1
+    l_w → <l_3 ●> '1
+    l_y → <l_x ○> '2
+    l_z → <l_2 ●> '2
+    l_2 → <1> '1
+    l_3 → <2> '2
+    l_1 → <l_2 ○> '2
+}
+store after insert(l_v → <l_1 ○> '1): {
+    l_w → <l_3 ●> '1
+    l_1 → <l_2 ○> '2
+    l_v → <l_1 ○> '1
+    l_y → <l_x ○> '2
+    l_z → <l_2 ●> '2
+    l_2 → <1> '1
+    l_3 → <2> '2
+    l_x → <l_1 ●> '1
+}
+store after drop([l_w ●, l_v ●, l_2 ●, l_x ●]): {
+    l_y → <l_x ○> '2
+    l_z → <l_2 ●> '2
+}
+store after insert(l_y → <l_x ○> '2): {
+    l_y → <l_x ○> '2
+}
+store after insert(l_z → <l_2 ●> '2): {
+    l_y → <l_x ○> '2
+    l_z → <l_2 ●> '2
+}
 
 ---- tests::eval_block_mut_ref stdout ----
 '4   evaluating stmt: let mut x = Box::new(203) (R-Declare)
@@ -401,8 +278,57 @@ store after insert(l_1 → <-150> '0): {
 }
 '4   evaluated expr Box::new(-150) ⇓ l_1 ●
 store after insert(l_x → <l_1 ●> '4): {
-    l_x → <l_1 ●> '4
     l_1 → <-150> '0
+    l_x → <l_1 ●> '4
+}
+
+---- tests::eval_assign_move stdout ----
+'4   evaluating stmt: let mut x = Box::new(14) (R-Declare)
+'4   evaluating expr: Box::new(14) (R-Box)
+'4   evaluating expr: 14 (R-Int)
+'4   evaluated expr 14 ⇓ 14
+store after insert(l_1 → <14> '0): {
+    l_1 → <14> '0
+}
+'4   evaluated expr Box::new(14) ⇓ l_1 ●
+store after insert(l_x → <l_1 ●> '4): {
+    l_1 → <14> '0
+    l_x → <l_1 ●> '4
+}
+'4   evaluating stmt: let mut y = Box::new(15) (R-Declare)
+'4   evaluating expr: Box::new(15) (R-Box)
+'4   evaluating expr: 15 (R-Int)
+'4   evaluated expr 15 ⇓ 15
+store after insert(l_2 → <15> '0): {
+    l_1 → <14> '0
+    l_x → <l_1 ●> '4
+    l_2 → <15> '0
+}
+'4   evaluated expr Box::new(15) ⇓ l_2 ●
+store after insert(l_y → <l_2 ●> '4): {
+    l_x → <l_1 ●> '4
+    l_y → <l_2 ●> '4
+    l_1 → <14> '0
+    l_2 → <15> '0
+}
+'4   evaluating stmt: x = y (R-Assign)
+'4   evaluating expr: y (R-Move)
+store after write(y, ⊥): {
+    l_x → <l_1 ●> '4
+    l_y → <⊥> '4
+    l_1 → <14> '0
+    l_2 → <15> '0
+}
+'4   evaluated expr y ⇓ l_2 ●
+store after drop([l_1 ●]): {
+    l_x → <l_1 ●> '4
+    l_y → <⊥> '4
+    l_2 → <15> '0
+}
+store after write(x, l_2 ●): {
+    l_x → <l_2 ●> '4
+    l_y → <⊥> '4
+    l_2 → <15> '0
 }
 
 ---- tests::eval_assign_replace stdout ----
@@ -429,52 +355,126 @@ store after insert(l_2 → <15> '0): {
 }
 '4   evaluated expr Box::new(15) ⇓ l_2 ●
 store after insert(l_y → <l_2 ●> '4): {
+    l_1 → <14> '0
+    l_x → <l_1 ●> '4
     l_2 → <15> '0
     l_y → <l_2 ●> '4
-    l_x → <l_1 ●> '4
-    l_1 → <14> '0
 }
 '4   evaluating stmt: x = y (R-Assign)
 '4   evaluating expr: y (R-Move)
 store after write(y, ⊥): {
+    l_1 → <14> '0
+    l_x → <l_1 ●> '4
     l_2 → <15> '0
     l_y → <⊥> '4
-    l_x → <l_1 ●> '4
-    l_1 → <14> '0
 }
 '4   evaluated expr y ⇓ l_2 ●
 store after drop([l_1 ●]): {
+    l_x → <l_1 ●> '4
     l_2 → <15> '0
     l_y → <⊥> '4
-    l_x → <l_1 ●> '4
 }
 store after write(x, l_2 ●): {
+    l_x → <l_2 ●> '4
     l_2 → <15> '0
     l_y → <⊥> '4
-    l_x → <l_2 ●> '4
 }
 '4   evaluating stmt: y = Box::new(16) (R-Assign)
 '4   evaluating expr: Box::new(16) (R-Box)
 '4   evaluating expr: 16 (R-Int)
 '4   evaluated expr 16 ⇓ 16
 store after insert(l_3 → <16> '0): {
-    l_2 → <15> '0
-    l_y → <⊥> '4
     l_x → <l_2 ●> '4
+    l_2 → <15> '0
     l_3 → <16> '0
+    l_y → <⊥> '4
 }
 '4   evaluated expr Box::new(16) ⇓ l_3 ●
 store after drop([⊥]): {
-    l_2 → <15> '0
-    l_y → <⊥> '4
     l_x → <l_2 ●> '4
+    l_2 → <15> '0
     l_3 → <16> '0
+    l_y → <⊥> '4
 }
 store after write(y, l_3 ●): {
-    l_2 → <15> '0
-    l_y → <l_3 ●> '4
     l_x → <l_2 ●> '4
+    l_2 → <15> '0
     l_3 → <16> '0
+    l_y → <l_3 ●> '4
+}
+
+---- tests::eval_block stdout ----
+'5   evaluating expr: {[..]; ε} '3 (R-Block)
+'5   enter block '3
+
+'3   evaluating stmt: let mut x = Box::new(23) (R-Declare)
+'3   evaluating expr: Box::new(23) (R-Box)
+'3   evaluating expr: 23 (R-Int)
+'3   evaluated expr 23 ⇓ 23
+store after insert(l_1 → <23> '0): {
+    l_1 → <23> '0
+}
+'3   evaluated expr Box::new(23) ⇓ l_1 ●
+store after insert(l_x → <l_1 ●> '3): {
+    l_1 → <23> '0
+    l_x → <l_1 ●> '3
+}
+'3   evaluating expr: ε (R-Unit)
+'3   evaluated expr ε ⇓ ε
+'3   exit block '3
+store after drop([l_x ●]): {}
+
+'5   evaluated expr {[..]; ε} '3 ⇓ ε
+
+---- tests::eval_assign_move_deref stdout ----
+'4   evaluating stmt: let mut x = Box::new(14) (R-Declare)
+'4   evaluating expr: Box::new(14) (R-Box)
+'4   evaluating expr: 14 (R-Int)
+'4   evaluated expr 14 ⇓ 14
+store after insert(l_1 → <14> '0): {
+    l_1 → <14> '0
+}
+'4   evaluated expr Box::new(14) ⇓ l_1 ●
+store after insert(l_x → <l_1 ●> '4): {
+    l_x → <l_1 ●> '4
+    l_1 → <14> '0
+}
+'4   evaluating stmt: let mut y = Box::new(15) (R-Declare)
+'4   evaluating expr: Box::new(15) (R-Box)
+'4   evaluating expr: 15 (R-Int)
+'4   evaluated expr 15 ⇓ 15
+store after insert(l_2 → <15> '0): {
+    l_x → <l_1 ●> '4
+    l_2 → <15> '0
+    l_1 → <14> '0
+}
+'4   evaluated expr Box::new(15) ⇓ l_2 ●
+store after insert(l_y → <l_2 ●> '4): {
+    l_x → <l_1 ●> '4
+    l_2 → <15> '0
+    l_1 → <14> '0
+    l_y → <l_2 ●> '4
+}
+'4   evaluating stmt: *x = *y (R-Assign)
+'4   evaluating expr: *y (R-Move)
+store after write(*y, ⊥): {
+    l_x → <l_1 ●> '4
+    l_2 → <⊥> '0
+    l_1 → <14> '0
+    l_y → <l_2 ●> '4
+}
+'4   evaluated expr *y ⇓ 15
+store after drop([14]): {
+    l_x → <l_1 ●> '4
+    l_2 → <⊥> '0
+    l_1 → <14> '0
+    l_y → <l_2 ●> '4
+}
+store after write(*x, 15): {
+    l_x → <l_1 ●> '4
+    l_2 → <⊥> '0
+    l_1 → <15> '0
+    l_y → <l_2 ●> '4
 }
 
 ---- tests::eval_box stdout ----
@@ -542,8 +542,8 @@ store after insert(l_1 → <14> '0): {
 }
 '4   evaluated expr Box::new(14) ⇓ l_1 ●
 store after insert(l_x → <l_1 ●> '4): {
-    l_x → <l_1 ●> '4
     l_1 → <14> '0
+    l_x → <l_1 ●> '4
 }
 
 ---- tests::eval_lits stdout ----
@@ -565,11 +565,6 @@ store after write(x, ⊥): {
 }
 '0   evaluated expr x ⇓ 5
 
----- tests::locate_var stdout ----
-store after insert(l_x → <ε> '0): {
-    l_x → <ε> '0
-}
-
 ---- tests::locate_ref stdout ----
 store after insert(l_1 → <ε> '0): {
     l_1 → <ε> '0
@@ -579,48 +574,29 @@ store after insert(l_y → <l_1 ●> '0): {
     l_1 → <ε> '0
 }
 store after insert(l_x → <l_y ○> '0): {
-    l_x → <l_y ○> '0
     l_y → <l_1 ●> '0
+    l_x → <l_y ○> '0
     l_1 → <ε> '0
 }
 
----- tests::locate_panic stdout ----
-store after insert(l_x → <1> '0): {
-    l_x → <1> '0
+---- tests::locate_var stdout ----
+store after insert(l_x → <ε> '0): {
+    l_x → <ε> '0
 }
-thread 'tests::locate_panic' panicked at src/eval.rs:105:18:
-tried to deref a non-ref
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 ---- tests::read_ref_owned stdout ----
 store after insert(l_1 → <-30> '0): {
     l_1 → <-30> '0
 }
 store after insert(l_y → <l_1 ●> '0): {
-    l_y → <l_1 ●> '0
     l_1 → <-30> '0
+    l_y → <l_1 ●> '0
 }
 store after insert(l_x → <l_y ○> '0): {
-    l_x → <l_y ○> '0
-    l_y → <l_1 ●> '0
-    l_1 → <-30> '0
-}
-
----- tests::read_panic stdout ----
-store after insert(l_1 → <-30> '0): {
-    l_1 → <-30> '0
-}
-store after insert(l_y → <l_1 ●> '0): {
-    l_y → <l_1 ●> '0
-    l_1 → <-30> '0
-}
-store after insert(l_x → <l_y ○> '0): {
-    l_y → <l_1 ●> '0
     l_1 → <-30> '0
     l_x → <l_y ○> '0
+    l_y → <l_1 ●> '0
 }
-thread 'tests::read_panic' panicked at src/eval.rs:105:18:
-tried to deref a non-ref
 
 ---- tests::read_var stdout ----
 store after insert(l_x → <42> '0): {
@@ -636,35 +612,59 @@ store after insert(l_x → <l_2 ○> '0): {
     l_2 → <1> '0
 }
 store after insert(l_y → <l_x ○> '0): {
-    l_x → <l_2 ○> '0
     l_y → <l_x ○> '0
+    l_x → <l_2 ○> '0
     l_2 → <1> '0
 }
 store after insert(l_z → <l_2 ○> '0): {
-    l_z → <l_2 ○> '0
+    l_y → <l_x ○> '0
     l_x → <l_2 ○> '0
     l_2 → <1> '0
-    l_y → <l_x ○> '0
+    l_z → <l_2 ○> '0
 }
 store after write(**y, 5): {
-    l_z → <l_2 ○> '0
+    l_y → <l_x ○> '0
     l_x → <l_2 ○> '0
     l_2 → <5> '0
-    l_y → <l_x ○> '0
+    l_z → <l_2 ○> '0
 }
+
+---- tests::locate_panic stdout ----
+store after insert(l_x → <1> '0): {
+    l_x → <1> '0
+}
+thread 'tests::locate_panic' panicked at src/eval.rs:107:18:
+tried to deref a non-ref
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- tests::read_panic stdout ----
+store after insert(l_1 → <-30> '0): {
+    l_1 → <-30> '0
+}
+store after insert(l_y → <l_1 ●> '0): {
+    l_1 → <-30> '0
+    l_y → <l_1 ●> '0
+}
+store after insert(l_x → <l_y ○> '0): {
+    l_x → <l_y ○> '0
+    l_1 → <-30> '0
+    l_y → <l_1 ●> '0
+}
+thread 'tests::read_panic' panicked at src/eval.rs:107:18:
+tried to deref a non-ref
 
 ---- tests::write_panic stdout ----
 store after insert(l_2 → <1> '0): {
     l_2 → <1> '0
 }
 store after insert(l_x → <l_2 ○> '0): {
-    l_2 → <1> '0
     l_x → <l_2 ○> '0
+    l_2 → <1> '0
 }
 store after insert(l_y → <l_x ○> '0): {
+    l_x → <l_2 ○> '0
     l_y → <l_x ○> '0
     l_2 → <1> '0
-    l_x → <l_2 ○> '0
 }
 store after insert(l_z → <l_2 ○> '0): {
     l_x → <l_2 ○> '0
@@ -672,7 +672,7 @@ store after insert(l_z → <l_2 ○> '0): {
     l_2 → <1> '0
     l_z → <l_2 ○> '0
 }
-thread 'tests::write_panic' panicked at src/eval.rs:105:18:
+thread 'tests::write_panic' panicked at src/eval.rs:107:18:
 tried to deref a non-ref
 
 ---- tests::write_two_deref stdout ----
@@ -684,8 +684,8 @@ store after insert(l_x → <l_2 ○> '0): {
     l_x → <l_2 ○> '0
 }
 store after insert(l_y → <l_x ○> '0): {
-    l_y → <l_x ○> '0
     l_2 → <1> '0
+    l_y → <l_x ○> '0
     l_x → <l_2 ○> '0
 }
 store after insert(l_z → <l_2 ○> '0): {
@@ -734,26 +734,45 @@ test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 
 running 18 tests
-test tests::basic_read_prohibited ... ok
+test tests::compatible_basic_fail ... ok
+test tests::env_contained ... ok
+test tests::env_contained_undefined ... ok
 test tests::compatible_basic ... ok
 test tests::basic_write_prohibited_2 ... ok
-test tests::compatible_basic_fail ... ok
-test tests::env_contained_undefined ... ok
-test tests::env_contained ... ok
-test tests::basic_write_prohibited ... ok
+test tests::basic_read_prohibited ... ok
 test tests::env_lval_box ... ok
+test tests::basic_write_prohibited ... ok
 test tests::compatible_refs ... ok
-test tests::env_var ... ok
+test tests::drop_basic ... ok
 test tests::env_lval_ref ... ok
+test tests::env_var ... ok
 test tests::move_under_box ... ok
 test tests::move_under_ref ... ok
-test tests::drop_basic ... ok
 test tests::mut_fail ... ok
 test tests::write_basic ... ok
 test tests::mut_succ ... ok
 test tests::write_ref ... ok
 
 successes:
+
+---- tests::env_contained stdout ----
+context after insert(y → <□□int> '1): {
+    y → <□□int> '1
+}
+
+---- tests::env_contained_undefined stdout ----
+context after insert(y → <□□⌊int⌋> '1): {
+    y → <□□⌊int⌋> '1
+}
+
+---- tests::basic_write_prohibited_2 stdout ----
+context after insert(z → <□&mut w> '2): {
+    z → <□&mut w> '2
+}
+context after insert(x → <□&***y> '30): {
+    x → <□&***y> '30
+    z → <□&mut w> '2
+}
 
 ---- tests::basic_read_prohibited stdout ----
 context after insert(z → <□&mut w> '2): {
@@ -764,23 +783,9 @@ context after insert(x → <□&mut ***y> '30): {
     x → <□&mut ***y> '30
 }
 
----- tests::basic_write_prohibited_2 stdout ----
-context after insert(z → <□&mut w> '2): {
-    z → <□&mut w> '2
-}
-context after insert(x → <□&***y> '30): {
-    z → <□&mut w> '2
-    x → <□&***y> '30
-}
-
----- tests::env_contained_undefined stdout ----
-context after insert(y → <□□⌊int⌋> '1): {
-    y → <□□⌊int⌋> '1
-}
-
----- tests::env_contained stdout ----
-context after insert(y → <□□int> '1): {
-    y → <□□int> '1
+---- tests::env_lval_box stdout ----
+context after insert(x → <□int> '3): {
+    x → <□int> '3
 }
 
 ---- tests::basic_write_prohibited stdout ----
@@ -788,13 +793,8 @@ context after insert(z → <□&mut w> '2): {
     z → <□&mut w> '2
 }
 context after insert(x → <□&mut ***y> '30): {
-    x → <□&mut ***y> '30
     z → <□&mut w> '2
-}
-
----- tests::env_lval_box stdout ----
-context after insert(x → <□int> '3): {
-    x → <□int> '3
+    x → <□&mut ***y> '30
 }
 
 ---- tests::compatible_refs stdout ----
@@ -807,52 +807,21 @@ context after insert(z → <□&*b> '1): {
 }
 context after insert(b → <□&*c> '1): {
     y → <□⌊&a⌋> '1
-    z → <□&*b> '1
     b → <□&*c> '1
+    z → <□&*b> '1
 }
 context after insert(a → <int> '1): {
-    z → <□&*b> '1
-    a → <int> '1
-    b → <□&*c> '1
     y → <□⌊&a⌋> '1
+    z → <□&*b> '1
+    b → <□&*c> '1
+    a → <int> '1
 }
 context after insert(c → <□⌊int⌋> '1): {
-    z → <□&*b> '1
-    a → <int> '1
-    b → <□&*c> '1
-    c → <□⌊int⌋> '1
     y → <□⌊&a⌋> '1
-}
-
----- tests::env_var stdout ----
-context after insert(x → <ε> '1): {
-    x → <ε> '1
-}
-context after insert(y → <int> '1): {
-    y → <int> '1
-    x → <ε> '1
-}
-
----- tests::env_lval_ref stdout ----
-context after insert(x → <&*y> '3): {
-    x → <&*y> '3
-}
-context after insert(y → <□int> '1): {
-    y → <□int> '1
-    x → <&*y> '3
-}
-
----- tests::move_under_box stdout ----
-context after insert(x → <□□□int> '40): {
-    x → <□□□int> '40
-}
-context after move(**x): {
-    x → <□□⌊□int⌋> '40
-}
-
----- tests::move_under_ref stdout ----
-context after insert(x → <□&mut *y> '40): {
-    x → <□&mut *y> '40
+    z → <□&*b> '1
+    c → <□⌊int⌋> '1
+    b → <□&*c> '1
+    a → <int> '1
 }
 
 ---- tests::drop_basic stdout ----
@@ -869,42 +838,73 @@ context after insert(z → <&mut **w> '1): {
     z → <&mut **w> '1
 }
 context after insert(w → <□□□&a> '87): {
-    w → <□□□&a> '87
-    x → <□□&mut **y> '11
     y → <□&mut *z> '11
     z → <&mut **w> '1
+    x → <□□&mut **y> '11
+    w → <□□□&a> '87
 }
 context after insert(a → <int> '11): {
-    w → <□□□&a> '87
-    x → <□□&mut **y> '11
     y → <□&mut *z> '11
     z → <&mut **w> '1
+    x → <□□&mut **y> '11
+    w → <□□□&a> '87
     a → <int> '11
 }
 context after insert(b → <int> '44): {
-    w → <□□□&a> '87
     b → <int> '44
-    x → <□□&mut **y> '11
     y → <□&mut *z> '11
     z → <&mut **w> '1
+    x → <□□&mut **y> '11
+    w → <□□□&a> '87
     a → <int> '11
 }
 context after drop('11): {
-    w → <□□□&a> '87
     b → <int> '44
     z → <&mut **w> '1
+    w → <□□□&a> '87
 }
 context after insert(z → <&mut **w> '1): {
     z → <&mut **w> '1
 }
 context after insert(w → <□□□&a> '87): {
-    z → <&mut **w> '1
     w → <□□□&a> '87
+    z → <&mut **w> '1
 }
 context after insert(b → <int> '44): {
-    z → <&mut **w> '1
     w → <□□□&a> '87
+    z → <&mut **w> '1
     b → <int> '44
+}
+
+---- tests::env_lval_ref stdout ----
+context after insert(x → <&*y> '3): {
+    x → <&*y> '3
+}
+context after insert(y → <□int> '1): {
+    x → <&*y> '3
+    y → <□int> '1
+}
+
+---- tests::env_var stdout ----
+context after insert(x → <ε> '1): {
+    x → <ε> '1
+}
+context after insert(y → <int> '1): {
+    y → <int> '1
+    x → <ε> '1
+}
+
+---- tests::move_under_box stdout ----
+context after insert(x → <□□□int> '40): {
+    x → <□□□int> '40
+}
+context after move(**x): {
+    x → <□□⌊□int⌋> '40
+}
+
+---- tests::move_under_ref stdout ----
+context after insert(x → <□&mut *y> '40): {
+    x → <□&mut *y> '40
 }
 
 ---- tests::mut_fail stdout ----
@@ -912,19 +912,19 @@ context after insert(x → <□&mut ***y> '31): {
     x → <□&mut ***y> '31
 }
 context after insert(y → <&mut z> '24): {
-    y → <&mut z> '24
     x → <□&mut ***y> '31
+    y → <&mut z> '24
 }
 context after insert(z → <□&**w> '23): {
+    x → <□&mut ***y> '31
     y → <&mut z> '24
     z → <□&**w> '23
-    x → <□&mut ***y> '31
 }
 context after insert(w → <□□□int> '29): {
-    y → <&mut z> '24
-    z → <□&**w> '23
     w → <□□□int> '29
     x → <□&mut ***y> '31
+    y → <&mut z> '24
+    z → <□&**w> '23
 }
 
 ---- tests::write_basic stdout ----
@@ -940,19 +940,19 @@ context after insert(x → <□&mut ***y> '31): {
     x → <□&mut ***y> '31
 }
 context after insert(y → <&mut z> '24): {
-    x → <□&mut ***y> '31
     y → <&mut z> '24
+    x → <□&mut ***y> '31
 }
 context after insert(z → <□&mut **w> '23): {
     z → <□&mut **w> '23
-    x → <□&mut ***y> '31
     y → <&mut z> '24
+    x → <□&mut ***y> '31
 }
 context after insert(w → <□□□int> '29): {
-    z → <□&mut **w> '23
-    w → <□□□int> '29
-    y → <&mut z> '24
     x → <□&mut ***y> '31
+    y → <&mut z> '24
+    w → <□□□int> '29
+    z → <□&mut **w> '23
 }
 
 ---- tests::write_ref stdout ----
@@ -960,50 +960,89 @@ context after insert(x → <□□&mut **y> '23): {
     x → <□□&mut **y> '23
 }
 context after insert(y → <□&mut *z> '11): {
-    x → <□□&mut **y> '23
     y → <□&mut *z> '11
+    x → <□□&mut **y> '23
 }
 context after insert(z → <&mut **w> '1): {
-    x → <□□&mut **y> '23
     y → <□&mut *z> '11
+    x → <□□&mut **y> '23
     z → <&mut **w> '1
 }
 context after insert(w → <□□□&a> '87): {
+    w → <□□□&a> '87
     y → <□&mut *z> '11
     x → <□□&mut **y> '23
     z → <&mut **w> '1
-    w → <□□□&a> '87
 }
 context after insert(a → <int> '23): {
+    w → <□□□&a> '87
     y → <□&mut *z> '11
     a → <int> '23
     x → <□□&mut **y> '23
     z → <&mut **w> '1
-    w → <□□□&a> '87
 }
 context after insert(b → <int> '44): {
+    w → <□□□&a> '87
     y → <□&mut *z> '11
     a → <int> '23
-    x → <□□&mut **y> '23
     b → <int> '44
+    x → <□□&mut **y> '23
     z → <&mut **w> '1
-    w → <□□□&a> '87
+}
+context after join env: {
+    w → <□□□&b,a> '87
+    y → <□&mut *z> '11
+    a → <int> '23
+    b → <int> '44
+    x → <□□&mut **y> '23
+    z → <&mut **w> '1
+}
+context after join env: {
+    w → <□□□&a,b> '87
+    y → <□&mut *z> '11
+    a → <int> '23
+    b → <int> '44
+    x → <□□&mut **y> '23
+    z → <&mut **w> '1
+}
+context after join env: {
+    w → <□□□&a,b> '87
+    y → <□&mut *z> '11
+    a → <int> '23
+    b → <int> '44
+    x → <□□&mut **y> '23
+    z → <&mut **w> '1
 }
 context after write(***x, □&b): {
+    w → <□□□&a,b> '87
     y → <□&mut *z> '11
     a → <int> '23
-    x → <□□&mut **y> '23
     b → <int> '44
+    x → <□□&mut **y> '23
     z → <&mut **w> '1
-    w → <□□□&b> '87
 }
-context after insert(w → <□□□&b> '87): {
+context after insert(w → <□□□&a,b> '87): {
+    w → <□□□&a,b> '87
     y → <□&mut *z> '11
     a → <int> '23
-    x → <□□&mut **y> '23
     b → <int> '44
+    x → <□□&mut **y> '23
     z → <&mut **w> '1
-    w → <□□□&b> '87
+}
+{
+    w → <□□□&a,b> '87
+    y → <□&mut *z> '11
+    a → <int> '23
+    b → <int> '44
+    x → <□□&mut **y> '23
+    z → <&mut **w> '1
+} {
+    w → <□□□&a,b> '87
+    y → <□&mut *z> '11
+    a → <int> '23
+    b → <int> '44
+    x → <□□&mut **y> '23
+    z → <&mut **w> '1
 }
 
 
@@ -1032,15 +1071,15 @@ test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 32 tests
 test type_tests::assign_err_unknown ... ok
-test type_tests::assign_err_borrow ... ok
-test type_tests::assign_err_update_imm ... ok
-test type_tests::assign_err_moved_out ... ok
-test type_tests::assign_err_incompat ... ok
 test type_tests::assign_move_in ... ok
-test type_tests::assign_ok ... ok
+test type_tests::assign_err_incompat ... ok
+test type_tests::assign_err_borrow ... ok
 test type_tests::block_err_lifetime ... ok
-test type_tests::assign_ok_ref ... ok
+test type_tests::assign_err_update_imm ... ok
 test type_tests::block_ok ... ok
+test type_tests::assign_err_moved_out ... ok
+test type_tests::assign_ok ... ok
+test type_tests::assign_ok_ref ... ok
 test type_tests::cannot_copy ... ok
 test type_tests::cannot_move ... ok
 test type_tests::copied ... ok
@@ -1057,8 +1096,8 @@ test type_tests::move_behind_ref ... ok
 test type_tests::moved_out ... ok
 test type_tests::mut_borrow_err_already_borrowed ... ok
 test type_tests::mut_borrow_err_moved_out ... ok
-test type_tests::mut_borrow_err_through_imm_ref ... ok
 test type_tests::mut_borrow_ok ... ok
+test type_tests::mut_borrow_err_through_imm_ref ... ok
 test type_tests::mut_borrow_through_ref ... ok
 test type_tests::still_moved_out ... ok
 test type_tests::type_box ... ok
@@ -1068,68 +1107,6 @@ successes:
 
 ---- type_tests::assign_err_unknown stdout ----
 '0   typing stmt: *x = 30 (T-Assign)
-
----- type_tests::assign_err_borrow stdout ----
-context after insert(a → <□int> '0): {
-    a → <□int> '0
-}
-context after insert(b → <&*a> '0): {
-    a → <□int> '0
-    b → <&*a> '0
-}
-'0   typing stmt: *a = 30 (T-Assign)
-'0   typed lval *a : int
-'0   typing expr: 30 (T-Int)
-'0   typed expr 30 : int
-context after write(*a, int): {
-    a → <□int> '0
-    b → <&*a> '0
-}
-
----- type_tests::assign_err_update_imm stdout ----
-context after insert(x → <□int> '0): {
-    x → <□int> '0
-}
-context after insert(y → <&*x> '0): {
-    y → <&*x> '0
-    x → <□int> '0
-}
-context after insert(z → <&mut y> '0): {
-    z → <&mut y> '0
-    y → <&*x> '0
-    x → <□int> '0
-}
-'0   typing stmt: **z = 30 (T-Assign)
-'0   typed lval **z : int
-'0   typing expr: 30 (T-Int)
-'0   typed expr 30 : int
-context after write(**z, int): {
-    x → <□int> '0
-}
-
----- type_tests::assign_err_moved_out stdout ----
-context after insert(x → <□⌊int⌋> '0): {
-    x → <□⌊int⌋> '0
-}
-context after insert(y → <int> '0): {
-    y → <int> '0
-    x → <□⌊int⌋> '0
-}
-'0   typing stmt: y = *x (T-Assign)
-'0   typed lval y : int
-'0   typing expr: *x 
----- type_tests::assign_err_incompat stdout ----
-context after insert(a → <□int> '0): {
-    a → <□int> '0
-}
-context after insert(b → <int> '0): {
-    b → <int> '0
-    a → <□int> '0
-}
-'0   typing stmt: *a = &b (T-Assign)
-'0   typed lval *a : int
-'0   typing expr: &b (T-ImmBorrow)
-'0   typed expr &b : &b
 
 ---- type_tests::assign_move_in stdout ----
 context after insert(x → <□⌊int⌋> '0): {
@@ -1142,38 +1119,49 @@ context after insert(x → <□⌊int⌋> '0): {
 context after write(*x, int): {
     x → <□int> '0
 }
+after write
 context after insert(x → <□int> '0): {
     x → <□int> '0
 }
 
----- type_tests::assign_ok stdout ----
-context after insert(x → <□int> '0): {
-    x → <□int> '0
+---- type_tests::assign_err_incompat stdout ----
+context after insert(a → <□int> '0): {
+    a → <□int> '0
 }
-'0   typing stmt: x = Box::new(40) (T-Assign)
-'0   typed lval x : □int
-'0   typing expr: Box::new(40) (T-Box)
-'0   typing expr: 40 (T-Int)
-'0   typed expr 40 : int
-'0   typed expr Box::new(40) : □int
-context after write(x, □int): {
-    x → <□int> '0
+context after insert(b → <int> '0): {
+    a → <□int> '0
+    b → <int> '0
 }
-'0   typing stmt: *x = 30 (T-Assign)
-'0   typed lval *x : int
+'0   typing stmt: *a = &b (T-Assign)
+'0   typed lval *a : int
+'0   typing expr: &b (T-ImmBorrow)
+'0   typed expr &b : &b
+
+---- type_tests::assign_err_borrow stdout ----
+context after insert(a → <□int> '0): {
+    a → <□int> '0
+}
+context after insert(b → <&*a> '0): {
+    b → <&*a> '0
+    a → <□int> '0
+}
+'0   typing stmt: *a = 30 (T-Assign)
+'0   typed lval *a : int
 '0   typing expr: 30 (T-Int)
 '0   typed expr 30 : int
-context after write(*x, int): {
-    x → <□int> '0
+context after write(*a, int): {
+    b → <&*a> '0
+    a → <□int> '0
 }
+after write
 
 ---- type_tests::block_err_lifetime stdout ----
 context after insert(x → <int> '0): {
     x → <int> '0
 }
 context after insert(y → <&x> '0): {
-    x → <int> '0
     y → <&x> '0
+    x → <int> '0
 }
 '0   typing expr: {[..]; ε} '1 (T-Block)
 '0   enter block '1
@@ -1182,49 +1170,36 @@ context after insert(y → <&x> '0): {
 '1   typing expr: 30 (T-Int)
 '1   typed expr 30 : int
 context after insert(z → <int> '1): {
-    x → <int> '0
     y → <&x> '0
     z → <int> '1
+    x → <int> '0
 }
 '1   typing stmt: y = &z (T-Assign)
 '1   typed lval y : &x
 '1   typing expr: &z (T-ImmBorrow)
 '1   typed expr &z : &z
 
----- type_tests::assign_ok_ref stdout ----
-context after insert(a → <□int> '0): {
-    a → <□int> '0
+---- type_tests::assign_err_update_imm stdout ----
+context after insert(x → <□int> '0): {
+    x → <□int> '0
 }
-context after insert(b → <int> '0): {
-    a → <□int> '0
-    b → <int> '0
+context after insert(y → <&*x> '0): {
+    x → <□int> '0
+    y → <&*x> '0
 }
-context after insert(x → <□&*a> '0): {
-    a → <□int> '0
-    x → <□&*a> '0
-    b → <int> '0
+context after insert(z → <&mut y> '0): {
+    x → <□int> '0
+    z → <&mut y> '0
+    y → <&*x> '0
 }
-context after insert(y → <&mut *x> '0): {
-    a → <□int> '0
-    x → <□&*a> '0
-    b → <int> '0
-    y → <&mut *x> '0
-}
-'0   typing stmt: *y = &b (T-Assign)
-'0   typed lval *y : &*a
-'0   typing expr: &b (T-ImmBorrow)
-'0   typed expr &b : &b
-context after write(*y, &b): {
-    a → <□int> '0
-    x → <□&b> '0
-    b → <int> '0
-    y → <&mut *x> '0
-}
-context after insert(x → <□&b> '0): {
-    a → <□int> '0
-    x → <□&b> '0
-    b → <int> '0
-    y → <&mut *x> '0
+'0   typing stmt: **z = 30 (T-Assign)
+'0   typed lval **z : int
+'0   typing expr: 30 (T-Int)
+'0   typed expr 30 : int
+context after write(**z, int): {
+    x → <□int> '0
+    z → <&mut y> '0
+    y → <&*x> '0
 }
 
 ---- type_tests::block_ok stdout ----
@@ -1258,6 +1233,94 @@ context after drop('1): {
 '0   typed expr {[..]; ε} '1 : ε
 context after insert(x → <□⌊□int⌋> '0): {
     x → <□⌊□int⌋> '0
+}
+
+---- type_tests::assign_err_moved_out stdout ----
+context after insert(x → <□⌊int⌋> '0): {
+    x → <□⌊int⌋> '0
+}
+context after insert(y → <int> '0): {
+    y → <int> '0
+    x → <□⌊int⌋> '0
+}
+'0   typing stmt: y = *x (T-Assign)
+'0   typed lval y : int
+'0   typing expr: *x 
+---- type_tests::assign_ok stdout ----
+context after insert(x → <□int> '0): {
+    x → <□int> '0
+}
+'0   typing stmt: x = Box::new(40) (T-Assign)
+'0   typed lval x : □int
+'0   typing expr: Box::new(40) (T-Box)
+'0   typing expr: 40 (T-Int)
+'0   typed expr 40 : int
+'0   typed expr Box::new(40) : □int
+context after write(x, □int): {
+    x → <□int> '0
+}
+after write
+'0   typing stmt: *x = 30 (T-Assign)
+'0   typed lval *x : int
+'0   typing expr: 30 (T-Int)
+'0   typed expr 30 : int
+context after write(*x, int): {
+    x → <□int> '0
+}
+after write
+
+---- type_tests::assign_ok_ref stdout ----
+context after insert(a → <□int> '0): {
+    a → <□int> '0
+}
+context after insert(b → <int> '0): {
+    b → <int> '0
+    a → <□int> '0
+}
+context after insert(x → <□&*a> '0): {
+    b → <int> '0
+    x → <□&*a> '0
+    a → <□int> '0
+}
+context after insert(y → <&mut *x> '0): {
+    b → <int> '0
+    a → <□int> '0
+    x → <□&*a> '0
+    y → <&mut *x> '0
+}
+'0   typing stmt: *y = &b (T-Assign)
+'0   typed lval *y : &*a
+'0   typing expr: &b (T-ImmBorrow)
+'0   typed expr &b : &b
+context after join env: {
+    b → <int> '0
+    a → <□int> '0
+    x → <□&b,*a> '0
+    y → <&mut *x> '0
+}
+context after write(*y, &b): {
+    b → <int> '0
+    a → <□int> '0
+    x → <□&b,*a> '0
+    y → <&mut *x> '0
+}
+after write
+context after insert(x → <□&b,*a> '0): {
+    b → <int> '0
+    a → <□int> '0
+    x → <□&b,*a> '0
+    y → <&mut *x> '0
+}
+{
+    b → <int> '0
+    a → <□int> '0
+    x → <□&b,*a> '0
+    y → <&mut *x> '0
+} {
+    b → <int> '0
+    a → <□int> '0
+    x → <□&b,*a> '0
+    y → <&mut *x> '0
 }
 
 ---- type_tests::cannot_copy stdout ----
@@ -1322,8 +1385,8 @@ context after insert(x → <□int> '1): {
     x → <□int> '1
 }
 context after insert(y → <&mut *x> '1): {
-    x → <□int> '1
     y → <&mut *x> '1
+    x → <□int> '1
 }
 '0   typing expr: &x (T-ImmBorrow)
 
@@ -1371,8 +1434,8 @@ context after insert(x → <□int> '1): {
     x → <□int> '1
 }
 context after insert(y → <&x> '1): {
-    y → <&x> '1
     x → <□int> '1
+    y → <&x> '1
 }
 '0   typing expr: *y (T-Move)
 
@@ -1402,27 +1465,27 @@ context after insert(x → <□⌊int⌋> '1): {
 }
 '0   typing expr: &mut *x (T-MutBorrow)
 
----- type_tests::mut_borrow_err_through_imm_ref stdout ----
-context after insert(x → <□int> '1): {
-    x → <□int> '1
-}
-context after insert(y → <&*x> '1): {
-    x → <□int> '1
-    y → <&*x> '1
-}
-context after insert(z → <&mut y> '1): {
-    z → <&mut y> '1
-    x → <□int> '1
-    y → <&*x> '1
-}
-'0   typing expr: &mut **z (T-MutBorrow)
-
 ---- type_tests::mut_borrow_ok stdout ----
 context after insert(x → <□int> '1): {
     x → <□int> '1
 }
 '0   typing expr: &mut *x (T-MutBorrow)
 '0   typed expr &mut *x : &mut *x
+
+---- type_tests::mut_borrow_err_through_imm_ref stdout ----
+context after insert(x → <□int> '1): {
+    x → <□int> '1
+}
+context after insert(y → <&*x> '1): {
+    y → <&*x> '1
+    x → <□int> '1
+}
+context after insert(z → <&mut y> '1): {
+    y → <&*x> '1
+    z → <&mut y> '1
+    x → <□int> '1
+}
+'0   typing expr: &mut **z (T-MutBorrow)
 
 ---- type_tests::mut_borrow_through_ref stdout ----
 context after insert(x → <□int> '1): {

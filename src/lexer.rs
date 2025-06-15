@@ -7,6 +7,7 @@ pub enum Token {
     Lbracket,
     Rbracket,
     Eq,
+    Equals,
     Ampersand,
     Star,
     Comma,
@@ -16,6 +17,10 @@ pub enum Token {
     Mut,
     Box,
     AssertEq,
+    If,
+    Else,
+    True,
+    False,
     Int(i32),
     Var(String),
 }
@@ -26,11 +31,12 @@ impl Token {
     }
 }
 
-const LEXEMES: [(&str, Token); 14] = [
+const LEXEMES: [(&str, Token); 19] = [
     ("(", Token::Lparen),
     (")", Token::Rparen),
     ("{", Token::Lbracket),
     ("}", Token::Rbracket),
+    ("==", Token::Equals),
     ("=", Token::Eq),
     ("&", Token::Ampersand),
     ("*", Token::Star),
@@ -40,12 +46,16 @@ const LEXEMES: [(&str, Token); 14] = [
     ("let", Token::Let),
     ("mut", Token::Mut),
     ("assert_eq!", Token::AssertEq),
+    ("if", Token::If),
+    ("else", Token::Else),
+    ("true", Token::True),
+    ("false", Token::False),
     ("Box::new", Token::Box),
 ];
 
 pub struct Lexer<'a> {
     contents: Lines<'a>,
-    pub  curr_line_num: usize,
+    pub curr_line_num: usize,
     pub curr_col_num: usize,
     curr_line: &'a str,
 }

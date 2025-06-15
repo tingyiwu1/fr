@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use fr::{types::*, utils::*};
 
     #[test]
@@ -103,7 +105,7 @@ mod tests {
             Lifetime(40),
         );
         assert!(env.moove(&Lval::new("x", 2)).is_ok());
-        if let Some(slot) = env.0.get("x") {
+        if let Some(slot) = env.map.get("x") {
             assert_eq!(
                 slot.tipe,
                 Type::boxx(Type::boxx(Type::undefined(Type::boxx(Type::Int))))
@@ -173,7 +175,7 @@ mod tests {
         let env = Env::default();
         let t1 = Type::boxx(Type::boxx(Type::undefined(Type::boxx(Type::Int))));
         let t2 = Type::boxx(Type::undefined(Type::boxx(Type::boxx(Type::Int))));
-        assert!(env.compatible(&t1, &t2));
+        assert!(env.compatible(&t1, &t2).unwrap());
     }
 
     #[test]
@@ -181,7 +183,7 @@ mod tests {
         let env = Env::default();
         let t1 = Type::boxx(Type::boxx(Type::undefined(Type::boxx(Type::Int))));
         let t2 = Type::boxx(Type::undefined(Type::boxx(Type::Int)));
-        assert!(!env.compatible(&t1, &t2));
+        assert!(!env.compatible(&t1, &t2).unwrap());
     }
 
     #[test]
@@ -206,7 +208,7 @@ mod tests {
         env.insert("c", Type::boxx(Type::undefined(Type::Int)), Lifetime(1));
         let t1 = Type::boxx(Type::undefined(Type::mut_ref(Lval::new("y", 1))));
         let t2 = Type::boxx(Type::mut_ref(Lval::new("z", 2)));
-        assert!(env.compatible(&t1, &t2));
+        assert!(env.compatible(&t1, &t2).unwrap());
     }
 
     #[test]
@@ -218,7 +220,7 @@ mod tests {
             Lifetime(23),
         );
         assert!(env.write(&Lval::new("x", 2), Type::boxx(Type::Int)).is_ok());
-        if let Some(slot) = env.0.get("x") {
+        if let Some(slot) = env.map.get("x") {
             assert_eq!(slot.tipe, Type::boxx(Type::boxx(Type::boxx(Type::Int))));
         } else {
             assert!(false);
@@ -255,9 +257,14 @@ mod tests {
         let mut env_2 = env.clone();
         env_2.insert(
             "w",
-            Type::boxx(Type::boxx(Type::boxx(Type::imm_ref(Lval::new("b", 0))))),
+            Type::boxx(Type::boxx(Type::boxx(Type::Ref(
+                HashSet::from_iter(vec![Lval::var("b"), Lval::var("a")]),
+                Mutable::No,
+            )))),
+            // Type::boxx(Type::boxx(Type::boxx(Type::imm_ref(Lval::new("b", 0))))),
             Lifetime(87),
         );
+        println!("{env} {env_2}");
         assert_eq!(env, env_2);
     }
 

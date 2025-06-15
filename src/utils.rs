@@ -36,7 +36,7 @@ impl Display for Lifetime {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Lval {
     pub ident: Ident,
     pub derefs: usize,
@@ -70,13 +70,23 @@ impl Display for Lval {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct Block(Vec<Stmt>, Box<Expr>, Lifetime);
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Unit,
     Int(i32),
+    Bool(bool),
     Lval(Lval, Copyable),
     Box(Box<Expr>),
     Borrow(Lval, Mutable),
     AssertEq(Box<Expr>, Box<Expr>),
+    Equals(Box<Expr>, Box<Expr>),
+    IfElse {
+        cond: Box<Expr>,
+        t: Box<Expr>,
+        f: Box<Expr>,
+    },
     Block(Vec<Stmt>, Box<Expr>, Lifetime),
 }
 
@@ -90,6 +100,27 @@ impl Expr {
     pub fn block(stmts: Vec<Stmt>, l: Lifetime) -> Expr {
         Expr::Block(stmts, Box::new(Expr::Unit), l)
     }
+    pub fn equals(left: Expr, right: Expr) -> Expr {
+        Expr::Equals(Box::new(left), Box::new(right))
+    }
+    pub fn if_else(
+        cond: Expr,
+        t: (Vec<Stmt>, Expr, Lifetime),
+        f: (Vec<Stmt>, Expr, Lifetime),
+    ) -> Expr {
+        Expr::IfElse {
+            cond: Box::new(cond),
+            t: Box::new(Expr::Block(t.0, Box::new(t.1), t.2)),
+            f: Box::new(Expr::Block(f.0, Box::new(f.1), f.2)),
+        }
+    }
+
+    fn maybe_parenthesize(&self) -> String {
+        match self {
+            Expr::Equals(..) => format!("({})", self),
+            _ => format!("{}", self),
+        }
+    }
 }
 
 impl Display for Expr {
@@ -97,6 +128,7 @@ impl Display for Expr {
         match self {
             Expr::Unit => write!(f, "ε"),
             Expr::Int(i) => write!(f, "{}", i),
+            Expr::Bool(b) => write!(f, "{}", b),
             Expr::Lval(lval, copyable) => write!(
                 f,
                 "{}{}",
@@ -117,6 +149,13 @@ impl Display for Expr {
                 lval
             ),
             Expr::AssertEq(e1, e2) => write!(f, "assert_eq!({}, {})", *e1, *e2),
+            Expr::Equals(e1, e2) => write!(
+                f,
+                "{} == {}",
+                e1.maybe_parenthesize(),
+                e2.maybe_parenthesize()
+            ),
+            Expr::IfElse { cond, t, f: f2 } => write!(f, "if {} {} else {}", *cond, *t, *f2),
             Expr::Block(_stmts, expr, lifetime) => {
                 write!(f, "{{[..]; {}}} '{}", *expr, lifetime)
             }

@@ -14,6 +14,7 @@ pub enum Owned {
 pub enum Value {
     Unit,
     Int(i32),
+    Bool(bool),
     Ref(Location, Owned),
 }
 
@@ -22,6 +23,7 @@ impl Display for Value {
         match self {
             Value::Unit => write!(f, "ε"),
             Value::Int(i) => write!(f, "{}", i),
+            Value::Bool(b) => write!(f, "{}", b),
             Value::Ref(loc, owned) => write!(
                 f,
                 "l_{} {}",
@@ -202,6 +204,16 @@ impl Context {
                 println!("(R-Int)");
                 res = Value::Int(*i);
             }
+            Expr::Bool(b) => {
+                println!("(R-Bool)");
+                res = Value::Bool(*b);
+            }
+            Expr::Equals(e1, e2) => {
+                println!("(R-Equal)");
+                let v1 = self.eval_expr(e1, l);
+                let v2 = self.eval_expr(e2, l);
+                res = Value::Bool(v1 == v2);
+            }
             Expr::Lval(lval, copyable) => {
                 res = match copyable {
                     Copyable::No => {
@@ -229,6 +241,16 @@ impl Context {
                 let v2 = self.eval_expr(e2, l);
                 assert_eq!(v1, v2);
                 res = Value::Unit;
+            }
+            Expr::IfElse { cond, t, f } => {
+                println!("(R-If)");
+                let Value::Bool(b) = self.eval_expr(cond, l) else {
+                    panic!("not bool in if cond");
+                };
+                let block @ Expr::Block(..) = (if b { t.as_ref() } else { f }) else {
+                    panic!("if-else body not block");
+                };
+                res = self.eval_expr(block, l)
             }
             Expr::Borrow(lval, _mutable) => {
                 println!("(R-Borrow)");

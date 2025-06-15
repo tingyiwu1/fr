@@ -117,6 +117,19 @@ impl<'a> Parser<'a> {
         Ok(Expr::assert_eq(e1, e2))
     }
 
+    fn parse_if_else(&mut self) -> ParseResult<Expr> {
+        self.next_token_match(Token::If)?;
+        let cond = self.parse_expr()?;
+        let b1 = self.parse_block()?;
+        self.next_token_match(Token::Else)?;
+        let b2 = self.parse_block()?;
+
+        let (Expr::Block(s1, e1, l1), Expr::Block(s2, e2, l2)) = (b1, b2) else {
+            panic!();
+        };
+        Ok(Expr::if_else(cond, (s1, *e1, l1), (s2, *e2, l2)))
+    }
+
     fn parse_block(&mut self) -> ParseResult<Expr> {
         self.next_token_match(Token::Lbracket)?;
         let mut stmts = vec![];
@@ -174,26 +187,55 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
-        // dbg!(self.peek_token()?);
-        match self.peek_token()? {
+        let e = self.parse_expr1()?;
+
+        if let Token::Equals = self.peek_token()? {
+            self.next_token_match(Token::Equals)?;
+            let e2 = self.parse_expr1()?;
+            return Ok(Expr::equals(e, e2));
+        }
+        Ok(e)
+    }
+
+    fn parse_expr1(&mut self) -> ParseResult<Expr> {
+        let e = match self.peek_token()? {
             Token::Lparen => {
                 self.next_token_match(Token::Lparen)?;
-                self.next_token_match(Token::Rparen)?;
-                Ok(Expr::Unit)
+                match self.peek_token()? {
+                    Token::Rparen => {
+                        self.next_token_match(Token::Rparen)?;
+                        Expr::Unit
+                    }
+                    _ => {
+                        let e = self.parse_expr()?;
+                        self.next_token_match(Token::Rparen)?;
+                        e
+                    }
+                }
             }
             Token::Int(_) => {
                 let Token::Int(i) = self.next_token()? else {
                     panic!();
                 };
-                Ok(Expr::Int(i))
+                Expr::Int(i)
             }
-            Token::Star | Token::Var(_) => Ok(Expr::Lval(self.parse_lval()?, Copyable::No)),
-            Token::Box => Ok(self.parse_box()?),
-            Token::AssertEq => Ok(self.parse_assert_eq()?),
-            Token::Ampersand => Ok(self.parse_borrow()?),
-            Token::Lbracket => Ok(self.parse_block()?),
-            _ => Err(Error::Unexpected(self.next_token()?)),
-        }
+            Token::True => {
+                self.next_token_match(Token::True)?;
+                Expr::Bool(true)
+            }
+            Token::False => {
+                self.next_token_match(Token::False)?;
+                Expr::Bool(false)
+            }
+            Token::Star | Token::Var(_) => Expr::Lval(self.parse_lval()?, Copyable::No),
+            Token::Box => self.parse_box()?,
+            Token::AssertEq => self.parse_assert_eq()?,
+            Token::If => self.parse_if_else()?,
+            Token::Ampersand => self.parse_borrow()?,
+            Token::Lbracket => self.parse_block()?,
+            _ => return Err(Error::Unexpected(self.next_token()?)),
+        };
+        Ok(e)
     }
 
     pub fn parse(&mut self) -> ParseResult<Expr> {

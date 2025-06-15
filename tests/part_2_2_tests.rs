@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod type_tests {
+    use std::collections::HashSet;
+
     use fr::{types::*, utils::*};
 
     #[test]
@@ -129,12 +131,9 @@ mod type_tests {
         let mut ctxt = Context::default();
         ctxt.env.insert("x", Type::boxx(Type::Int), Lifetime(1));
         ctxt.env
-            .insert("y", Type::Ref(Lval::new("x", 0), Mutable::No), Lifetime(1));
+            .insert("y", Type::imm_ref(Lval::new("x", 0)), Lifetime(1));
         let mut e = Expr::Borrow(Lval::new("x", 1), Mutable::No);
-        assert_eq!(
-            ctxt.type_expr(&mut e),
-            Ok(Type::Ref(Lval::new("x", 1), Mutable::No))
-        );
+        assert_eq!(ctxt.type_expr(&mut e), Ok(Type::imm_ref(Lval::new("x", 1))));
     }
 
     #[test]
@@ -142,7 +141,7 @@ mod type_tests {
         let mut ctxt = Context::default();
         ctxt.env.insert("x", Type::boxx(Type::Int), Lifetime(1));
         ctxt.env
-            .insert("y", Type::Ref(Lval::new("x", 1), Mutable::Yes), Lifetime(1));
+            .insert("y", Type::mut_ref(Lval::new("x", 1)), Lifetime(1));
         let mut e = Expr::Borrow(Lval::new("x", 0), Mutable::No);
         assert_eq!(
             ctxt.type_expr(&mut e),
@@ -167,10 +166,7 @@ mod type_tests {
         let mut ctxt = Context::default();
         ctxt.env.insert("x", Type::boxx(Type::Int), Lifetime(1));
         let mut e = Expr::Borrow(Lval::new("x", 1), Mutable::Yes);
-        assert_eq!(
-            ctxt.type_expr(&mut e),
-            Ok(Type::Ref(Lval::new("x", 1), Mutable::Yes))
-        );
+        assert_eq!(ctxt.type_expr(&mut e), Ok(Type::mut_ref(Lval::new("x", 1))));
     }
 
     #[test]
@@ -178,7 +174,7 @@ mod type_tests {
         let mut ctxt = Context::default();
         ctxt.env.insert("x", Type::boxx(Type::Int), Lifetime(1));
         ctxt.env
-            .insert("y", Type::Ref(Lval::new("x", 1), Mutable::No), Lifetime(1));
+            .insert("y", Type::imm_ref(Lval::new("x", 1)), Lifetime(1));
         let mut e = Expr::Borrow(Lval::new("x", 0), Mutable::Yes);
         assert_eq!(
             ctxt.type_expr(&mut e),
@@ -191,14 +187,11 @@ mod type_tests {
         let mut ctxt = Context::default();
         ctxt.env.insert("x", Type::boxx(Type::Int), Lifetime(1));
         ctxt.env
-            .insert("y", Type::Ref(Lval::new("x", 1), Mutable::Yes), Lifetime(1));
+            .insert("y", Type::mut_ref(Lval::new("x", 1)), Lifetime(1));
         ctxt.env
-            .insert("z", Type::Ref(Lval::new("y", 0), Mutable::Yes), Lifetime(1));
+            .insert("z", Type::mut_ref(Lval::new("y", 0)), Lifetime(1));
         let mut e = Expr::Borrow(Lval::new("z", 2), Mutable::Yes);
-        assert_eq!(
-            ctxt.type_expr(&mut e),
-            Ok(Type::Ref(Lval::new("z", 2), Mutable::Yes))
-        );
+        assert_eq!(ctxt.type_expr(&mut e), Ok(Type::mut_ref(Lval::new("z", 2))));
     }
 
     #[test]
@@ -206,9 +199,9 @@ mod type_tests {
         let mut ctxt = Context::default();
         ctxt.env.insert("x", Type::boxx(Type::Int), Lifetime(1));
         ctxt.env
-            .insert("y", Type::Ref(Lval::new("x", 1), Mutable::No), Lifetime(1));
+            .insert("y", Type::imm_ref(Lval::new("x", 1)), Lifetime(1));
         ctxt.env
-            .insert("z", Type::Ref(Lval::new("y", 0), Mutable::Yes), Lifetime(1));
+            .insert("z", Type::mut_ref(Lval::new("y", 0)), Lifetime(1));
         let mut e = Expr::Borrow(Lval::new("z", 2), Mutable::Yes);
         assert_eq!(
             ctxt.type_expr(&mut e),
@@ -249,11 +242,9 @@ mod type_tests {
                 Expr::Borrow(Lval::new("x", 1), Mutable::Yes)
             ))
             .is_ok());
-        ctxt_2.env.insert(
-            "y",
-            Type::Ref(Lval::new("x", 1), Mutable::Yes),
-            Lifetime::global(),
-        );
+        ctxt_2
+            .env
+            .insert("y", Type::mut_ref(Lval::new("x", 1)), Lifetime::global());
         assert_eq!(ctxt, ctxt_2)
     }
 
@@ -311,14 +302,11 @@ mod type_tests {
         ctxt.env.insert("b", Type::Int, Lifetime::global());
         ctxt.env.insert(
             "x",
-            Type::boxx(Type::Ref(Lval::new("a", 1), Mutable::No)),
+            Type::boxx(Type::imm_ref(Lval::new("a", 1))),
             Lifetime::global(),
         );
-        ctxt.env.insert(
-            "y",
-            Type::Ref(Lval::new("x", 1), Mutable::Yes),
-            Lifetime::global(),
-        );
+        ctxt.env
+            .insert("y", Type::mut_ref(Lval::new("x", 1)), Lifetime::global());
         let mut ctxt_2 = ctxt.clone();
         assert!(ctxt
             .type_stmt(&mut Stmt::Assign(
@@ -328,9 +316,14 @@ mod type_tests {
             .is_ok());
         ctxt_2.env.insert(
             "x",
-            Type::boxx(Type::Ref(Lval::new("b", 0), Mutable::No)),
+            Type::boxx(Type::Ref(
+                HashSet::from_iter(vec![Lval::var("b"), Lval::deref(1, "a")]),
+                Mutable::No,
+            )),
+            // Type::boxx(Type::imm_ref(Lval::new("b", 0))),
             Lifetime::global(),
         );
+        println!("{} {}", ctxt.env, ctxt_2.env);
         assert_eq!(ctxt, ctxt_2);
     }
 
@@ -347,7 +340,7 @@ mod type_tests {
             )),
             Err(Error::IncompatibleTypes(
                 Type::Int,
-                Type::Ref(Lval::new("b", 0), Mutable::No)
+                Type::imm_ref(Lval::new("b", 0))
             )),
         );
     }
@@ -357,11 +350,8 @@ mod type_tests {
         let mut ctxt = Context::default();
         ctxt.env
             .insert("a", Type::boxx(Type::Int), Lifetime::global());
-        ctxt.env.insert(
-            "b",
-            Type::Ref(Lval::new("a", 1), Mutable::No),
-            Lifetime::global(),
-        );
+        ctxt.env
+            .insert("b", Type::imm_ref(Lval::new("a", 1)), Lifetime::global());
         assert_eq!(
             ctxt.type_stmt(&mut Stmt::Assign(Lval::new("a", 1), Expr::Int(30))),
             Err(Error::AssignAfterBorrow(Lval::new("a", 1))),
@@ -418,16 +408,10 @@ mod type_tests {
         let mut ctxt = Context::default();
         ctxt.env
             .insert("x", Type::boxx(Type::Int), Lifetime::global());
-        ctxt.env.insert(
-            "y",
-            Type::Ref(Lval::new("x", 1), Mutable::No),
-            Lifetime::global(),
-        );
-        ctxt.env.insert(
-            "z",
-            Type::Ref(Lval::new("y", 0), Mutable::Yes),
-            Lifetime::global(),
-        );
+        ctxt.env
+            .insert("y", Type::imm_ref(Lval::new("x", 1)), Lifetime::global());
+        ctxt.env
+            .insert("z", Type::mut_ref(Lval::new("y", 0)), Lifetime::global());
         assert_eq!(
             ctxt.type_stmt(&mut Stmt::Assign(Lval::new("z", 2), Expr::Int(30))),
             Err(Error::UpdateBehindImmRef(Lval::new("z", 2))),
@@ -460,11 +444,8 @@ mod type_tests {
     fn block_err_lifetime() {
         let mut ctxt = Context::default();
         ctxt.env.insert("x", Type::Int, Lifetime::global());
-        ctxt.env.insert(
-            "y",
-            Type::Ref(Lval::new("x", 0), Mutable::No),
-            Lifetime::global(),
-        );
+        ctxt.env
+            .insert("y", Type::imm_ref(Lval::new("x", 0)), Lifetime::global());
         let mut e = Expr::block(
             vec![
                 Stmt::LetMut("z".to_string(), Expr::Int(30)),
